@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Just Messenger</title>
+    <link rel="stylesheet" type="text/css" href="css/bootstrap.css" />
+    <script src="js/jquery-3.5.1.min.js"></script>
+    <script src="js/bootstrap.bundle.js"></script>
+    <script src="/socket.io/socket.io.js"></script>
+    <script>
+        $(function() {
+            const socket = io.connect('http://localhost:3000');
+
+            if (typeof(Storage) != "undefined") {
+                var username = sessionStorage.getItem('name') || "Anonymous";
+
+                //Load Message
+                $.ajax({
+                    url: '/json/message',
+                    type: 'get'
+                }).done(data => {
+                    if (data == "") {
+                        return;
+                    }
+                    let temp = JSON.parse(data);
+                    for (let i of temp.messages) {
+                        if (username == i.name) {
+                            $("#msgArea").append(`
+                        <div class="row pr-2 py-2">
+                            <div class="col-7 offset-5 border border-primary" style="border-radius: 50px;">
+                                <div class="row">
+                                    <div class="col text-right pr-3" style="font-size: 20px; color: blue;">
+                                        You
+                                    </div>
+                                </div>
+                                <div class="row">
+                                    <div class="col text-right pr-3" style="font-size: 20px;">
+                                        ${i.msg}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    `);
+                        } else {
+                            $("#msgArea").append(`
+                        <div class="row pl-2 py-2">
+                            <div class="col-7 border border-danger" style="border-radius: 50px;">
+                                <div class="row">
+                                    <div class="col pl-3" style="font-size: 20px; color: ${i.color};">
+                                        ${i.name}
+                                    </div>
+                                </div>
+                                <div class="row">
+                                    <div class="col pl-3" style="font-size: 20px;">
+                                        ${i.msg}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    `);
+                        }
+                    }
+                });
+                //Also make this shit back end
+
+                socket.emit('user', {
+                    name: username,
+                    color: "red"
+                });
+
+                socket.on('active', data => {
+                    if (Object.keys(data).length === 0)
+                        return;
+
+                    let found = false;
+                    for (let i in data)
+                        if (data[i].name == username)
+                            found = true;
+                    if (found)
+                        return;
+
+                    for (let i in data) {
+                        $("#online-user").append(`
+                            <div class="row pb-1" id="user${data[i].count}">
+                                <div class="col" style="font-size: 20px; color: ${data[i].color};">
+                                    ${data[i].name}
+                                </div>
+                                <div class="col" style="background-color: green;">
+                                </div>
+                            </div>
+                        `);
+                    }
+                });
+
+
+                socket.on('user', data => {
+                    $("#msgArea").append(`
+                        <div class="row">
+                            <div class="col text-center p-1" style="font-size: 25px;"><span style="color: ${data.color};">${data.name}</span> has joined the chat.</div>
+                        </div>
+                    `);
+
+                    $("#online-user").append(`
+                        <div class="row pb-1" id="user${data.count}">
+                            <div class="col" style="font-size: 20px; color: ${data.color};">
+                                ${data.name}
+                            </div>
+                            <div class="col" style="background-color: green;">
+                            </div>
+                        </div>
+                    `);
+
+                    $("#audio")[0].play();
+
+                    // if('Notification' in window){
+                    //     Notification.requestPermission(async status => {
+                    //         await navigator.serviceWorker.getRegistration('sw.js')
+                    //         .then(reg => {
+                    //             const options = {
+                    //                 body: `${data.name} has joined the chat.`,
+                    //                 icon: "images/chat.png",
+                    //                 vibrate: [100, 50, 100],
+                    //                 actions: [
+                    //                     {action: 'explore', title: 'Check out more',
+                    //                     icon: 'images/checkmark.png'},
+                    //                     {action: 'close', title: 'Close the notification',
+                    //                     icon: 'images/xmark.png'},
+                    //                 ]          
+                    //             };
+
+                    //             reg.showNotification("New Notification", options);
+                    //         })
+                    //         .catch(err => {
+                    //             console.log("Something seems to be wrong. Service Worker cannot be registered. Error: ", err);
+                    //         });
+                    //     });
+                    // }
+                });
+
+                socket.on("dis", data => {
+                    $("#msgArea").append(`
+                        <div class="row">
+                            <div class="col text-center p-1" style="font-size: 25px;"><span style="color: ${data.color};">${data.name}</span> has left the chat.</div>
+                        </div>
+                    `);
+
+                    $("#audio")[0].play();
+
+                    $(`#user${data.count}`).remove();
+                });
+
+                $("form").on("submit", e => {
+                    e.preventDefault();
+                    let mesg = $("#msg").val();
+                    if (!mesg) {
+                        return;
+                    }
+
+                    $("#msg").val("");
+
+                    if (mesg == "/delete") {
+                        $.ajax({
+                            url: "/json/message",
+                            type: "delete"
+                        });
+                        $("#msgArea").append(`
+                            <div class="row">
+                                <div class="col text-center p-1" style="font-size: 25px;">All message records are deleted.</div>
+                            </div>
+                        `);
+                        return;
+                    }
+
+                    socket.emit('msg', {
+                        name: username,
+                        msg: mesg
+                    });
+
+
+                    $("#msgArea").append(`
+                        <div class="row pr-2 py-2">
+                            <div class="col-7 offset-5 border border-primary" style="border-radius: 50px;">
+                                <div class="row">
+                                    <div class="col text-right pr-3" style="font-size: 20px; color: blue;">
+                                        You
+                                    </div>
+                                </div>
+                                <div class="row">
+                                    <div class="col text-right pr-3" style="font-size: 20px;">
+                                        ${mesg}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    `);
+
+                });
+
+                //Receiving A message
+                socket.on('msg', data => {
+                    $("#audio")[0].play();
+                    $("#msgArea").append(`
+                        <div class="row pl-2 py-2">
+                            <div class="col-7 border border-danger" style="border-radius: 50px;">
+                                <div class="row">
+                                    <div class="col pl-3" style="font-size: 20px; color: ${data.color};">
+                                        ${data.name}
+                                    </div>
+                                </div>
+                                <div class="row">
+                                    <div class="col pl-3" style="font-size: 20px;">
+                                        ${data.msg}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    `);
+                });
+
+                $("#msg").on('focus', _ => {
+                    socket.emit('typing', `${username} is currently typing...`);
+                });
+
+                $("#msg").on('blur', _ => {
+                    socket.emit('typing', `stop`);
+                });
+
+
+                socket.on('typing', data => {
+                    if (data == "stop") {
+                        $("#temp_msg").remove();
+                    } else {
+                        $("#msgArea").append(`
+                        <div class="row" id="temp_msg">
+                            <div class="col text-center p-1" style="font-size: 20px;">
+                                ${data}
+                            </div>
+                        </div>
+                    `);
+                    }
+                });
+            }
+        });
+    </script>
+</head>
+
+<body>
+    <audio hidden id="audio">
+        <source src="audio/notification.mp3" type="audio/mpeg">
+        Your browser does not support the audio element.
+    </audio>
+
+    <div class="d-flex align-items-center justify-content-center py-3">
+        <div class="border border-primary" style="width: 90%;">
+            <div class="col">
+                <div class="row text-center" style="background-color:#483D8B; color: white;">
+                    <div class="col h1">
+                        Just MessageBoard
+                    </div>
+                </div>
+                <div class="row">
+                    <div class="col-3">
+                        <div class="row text-center" style="background-color:#0000FF; color: white;">
+                            <div class="col h2">
+                                Online Users:
+                            </div>
+                        </div>
+                        <div class="row" style="background-color:#00BFFF;">
+                            <div class="col" id="online-user" style="height: 600px; overflow-y:scroll;">
+                                <div class="row pb-1">
+                                    <div class="col" style="font-size: 20px; color: black;">
+                                        You
+                                    </div>
+                                    <div class="col" style="background-color: green;">
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-9">
+                        <div class="row" style="height: 90%; background-color: white;">
+                            <div class="col" id="msgArea" style="overflow: scroll; height: 600px;">
+                                <div class="row">
+                                    <div class="col text-center p-1" style="font-size: 25px;"><span style="color: blue">You</span> have joined the chat.</div>
+                                </div>
+                            </div>
+                        </div>
+                        <form>
+                            <div class="row p-2">
+                                <div class="col-10">
+                                    <input type="text" class="form-control" id="msg" placeholder="Send a message...." style="width: 100%; height: 120%" autocomplete="off" />
+                                </div>
+                                <div class="col-2">
+                                    <button class="btn btn-primary" style="width: 100%; height: 120%">Send</button>
+                                </div>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</body>
+
+</html>
